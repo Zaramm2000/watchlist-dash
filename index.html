@@ -38,7 +38,8 @@ main{padding:0 16px 28px}
 .thesis,.risks,.view{font-size:.88rem;line-height:1.35}
 .zonebar{height:8px;border-radius:999px;background:#243047;overflow:hidden}
 .zonebar .fill{height:100%;background:linear-gradient(90deg,#2f6fed,#3ecf8e)}
-.hidden{display:none}
+.hidden{display:none!important}
+.modal-bg.hidden{display:none!important;pointer-events:none!important;visibility:hidden}
 footer{padding:0 16px 24px;color:var(--muted);font-size:.75rem}
 .hint{margin:0 16px 12px;padding:10px 12px;border-radius:12px;background:#152036;border:1px dashed #35507a;color:#b8c7e0;font-size:.82rem}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:40;display:flex;align-items:flex-end;justify-content:center;padding:12px}
@@ -81,7 +82,7 @@ svg.chart{width:100%;height:180px;display:block}
   <section id="panel-crypto" class="grid hidden"></section>
 </main>
 <footer>Keine Anlageberatung. Einstieg = Kurs nahe Watchlist-Aufnahme (~4.9.2026). FinScout = Aktien · KryptoScout = Crypto.</footer>
-<div id="modalBg" class="modal-bg hidden" role="dialog">
+<div id="modalBg" class="modal-bg hidden" role="dialog" aria-hidden="true">
   <div class="modal" id="modal">
     <div class="modal-head">
       <div style="min-width:0;flex:1">
@@ -208,17 +209,24 @@ function drawChart(points){
   const area=d+` L${coords[coords.length-1][0]},${h-pad} L${coords[0][0]},${h-pad} Z`;
   svg.innerHTML=`<path d="${area}" fill="${color}" opacity="0.12"></path><path d="${d}" fill="none" stroke="${color}" stroke-width="2.5"></path>`;
 }
+let modalBlockClicksUntil=0;
 function closeModal(){
   const bg=document.getElementById('modalBg');
-  if(bg) bg.classList.add('hidden');
+  if(bg){
+    bg.classList.add('hidden');
+    bg.setAttribute('aria-hidden','true');
+  }
   document.body.style.overflow='';
   currentItem=null;
+  // Android: prevent ghost-click reopening the card underneath
+  modalBlockClicksUntil=Date.now()+450;
 }
 function openModal(item){
   try{
     currentItem=item;
     const bg=document.getElementById('modalBg');
     bg.classList.remove('hidden');
+    bg.setAttribute('aria-hidden','false');
     document.body.style.overflow='hidden';
     document.getElementById('mTitle').textContent=(item.ticker||'')+' · '+(item.name||'');
     document.getElementById('mSub').textContent=(item.role||'')+' · '+(item.owner||'');
@@ -269,7 +277,8 @@ function render(data){
     const el=document.getElementById('panel-'+sec);
     el.innerHTML=(data[sec]||[]).map(card).join('');
     el.querySelectorAll('.card').forEach(btn=>{
-      btn.addEventListener('click',()=>{
+      btn.addEventListener('click',e=>{
+        if(Date.now()<modalBlockClicksUntil){e.preventDefault();e.stopPropagation();return;}
         const t=btn.dataset.ticker;
         const item=(data[sec]||[]).find(x=>x.ticker===t);
         if(item) openModal(item);
@@ -285,7 +294,10 @@ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>
   document.getElementById('panel-stocks').classList.toggle('hidden',tab!=='stocks');
   document.getElementById('panel-crypto').classList.toggle('hidden',tab!=='crypto');
 }));
-document.getElementById('closeModal').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeModal();});
+const closeBtn=document.getElementById('closeModal');
+const onClose=e=>{e.preventDefault();e.stopPropagation();closeModal();};
+closeBtn.addEventListener('click',onClose);
+closeBtn.addEventListener('touchend',onClose,{passive:false});
 document.getElementById('modalBg').addEventListener('click',e=>{if(e.target.id==='modalBg') closeModal();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
 render(DATA);
