@@ -44,8 +44,9 @@ footer{padding:0 16px 24px;color:var(--muted);font-size:.75rem}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:40;display:flex;align-items:flex-end;justify-content:center;padding:12px}
 @media(min-width:720px){.modal-bg{align-items:center}}
 .modal{background:var(--panel);border:1px solid var(--border);border-radius:18px;width:min(640px,100%);max-height:92vh;overflow:auto;padding:16px}
-.modal h2{margin:0 0 4px;font-size:1.2rem}
-.modal .close{appearance:none;border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:10px;padding:8px 12px;font-weight:700;float:right}
+.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;position:sticky;top:0;z-index:3;background:var(--panel);padding:4px 0 10px;margin-bottom:4px;border-bottom:1px solid var(--border)}
+.modal h2{margin:0 0 4px;font-size:1.2rem;padding-right:8px}
+.modal .close{appearance:none;border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px 14px;font-weight:700;float:none;flex-shrink:0;min-height:44px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .periods{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
 .periods button{appearance:none;border:1px solid var(--border);background:var(--panel2);color:var(--muted);border-radius:999px;padding:6px 10px;font-size:.78rem;font-weight:700}
 .periods button.on{color:var(--text);border-color:var(--accent)}
@@ -82,9 +83,13 @@ svg.chart{width:100%;height:180px;display:block}
 <footer>Keine Anlageberatung. Einstieg = Kurs nahe Watchlist-Aufnahme (~4.9.2026). FinScout = Aktien · KryptoScout = Crypto.</footer>
 <div id="modalBg" class="modal-bg hidden" role="dialog">
   <div class="modal" id="modal">
-    <button class="close" type="button" id="closeModal">Schließen</button>
-    <h2 id="mTitle"></h2>
-    <div class="meta" id="mSub"></div>
+    <div class="modal-head">
+      <div style="min-width:0;flex:1">
+        <h2 id="mTitle"></h2>
+        <div class="meta" id="mSub"></div>
+      </div>
+      <button class="close" type="button" id="closeModal" aria-label="Schließen">Schließen</button>
+    </div>
     <div class="kv" id="mKv"></div>
     <div class="periods" id="mPeriods"></div>
     <div class="chart-wrap"><svg class="chart" id="mChart" viewBox="0 0 600 180" preserveAspectRatio="none"></svg></div>
@@ -203,38 +208,54 @@ function drawChart(points){
   const area=d+` L${coords[coords.length-1][0]},${h-pad} L${coords[0][0]},${h-pad} Z`;
   svg.innerHTML=`<path d="${area}" fill="${color}" opacity="0.12"></path><path d="${d}" fill="none" stroke="${color}" stroke-width="2.5"></path>`;
 }
+function closeModal(){
+  const bg=document.getElementById('modalBg');
+  if(bg) bg.classList.add('hidden');
+  document.body.style.overflow='';
+  currentItem=null;
+}
 function openModal(item){
-  currentItem=item;
-  document.getElementById('modalBg').classList.remove('hidden');
-  document.getElementById('mTitle').textContent=item.ticker+' · '+(item.name||'');
-  document.getElementById('mSub').textContent=(item.role||'')+' · '+(item.owner||'');
-  const p=perf(item.entryPrice,item.price);
-  const perfStr=p?((p.pct>0?'+':'')+p.pct.toFixed(2)+'%'):'—';
-  document.getElementById('mKv').innerHTML=`
+  try{
+    currentItem=item;
+    const bg=document.getElementById('modalBg');
+    bg.classList.remove('hidden');
+    document.body.style.overflow='hidden';
+    document.getElementById('mTitle').textContent=(item.ticker||'')+' · '+(item.name||'');
+    document.getElementById('mSub').textContent=(item.role||'')+' · '+(item.owner||'');
+    const p=perf(item.entryPrice,item.price);
+    const perfStr=p?((p.pct>0?'+':'')+p.pct.toFixed(2)+'%'):'—';
+    document.getElementById('mKv').innerHTML=`
     <div><div class="k">Aktuell</div><div class="v">${fmtPrice(item.price,item.currency||'USD')}</div></div>
     <div><div class="k">Einstieg (Aufnahme)</div><div class="v">${fmtPrice(item.entryPrice,item.currency||'USD')}</div></div>
     <div><div class="k">Seit Aufnahme</div><div class="v">${perfStr}</div></div>
     <div><div class="k">Aufgenommen</div><div class="v">${item.entryDate||item.addedAt||'—'}</div></div>`;
-  const per=document.getElementById('mPeriods');
-  per.innerHTML=PERIODS.map(x=>`<button type="button" data-p="${x.id}" class="${x.id===currentPeriod?'on':''}">${x.label}</button>`).join('');
-  per.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
-    currentPeriod=b.dataset.p;
-    per.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.p===currentPeriod));
+    const per=document.getElementById('mPeriods');
+    per.innerHTML=PERIODS.map(x=>`<button type="button" data-p="${x.id}" class="${x.id===currentPeriod?'on':''}">${x.label}</button>`).join('');
+    per.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      currentPeriod=b.dataset.p;
+      per.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.p===currentPeriod));
+      const pts=sliceHistory(item,currentPeriod);
+      drawChart(pts);
+      document.getElementById('mChartNote').textContent=item.historyNote||(pts.length?`${pts.length} Punkte · ${PERIODS.find(z=>z.id===currentPeriod).label}`:'Historie folgt');
+    }));
     const pts=sliceHistory(item,currentPeriod);
     drawChart(pts);
     document.getElementById('mChartNote').textContent=item.historyNote||(pts.length?`${pts.length} Punkte · ${PERIODS.find(z=>z.id===currentPeriod).label}`:'Historie folgt');
-  }));
-  const pts=sliceHistory(item,currentPeriod);
-  drawChart(pts);
-  document.getElementById('mChartNote').textContent=item.historyNote||(pts.length?`${pts.length} Punkte · ${PERIODS.find(z=>z.id===currentPeriod).label}`:'Historie folgt');
-  document.getElementById('mWhyNow').textContent=item.whyNow||'—';
-  const cats=item.catalysts||[];
-  const ul=document.getElementById('mCatalysts');
-  ul.innerHTML=cats.length?cats.map(c=>`<li>${String(c).replace(/</g,'&lt;')}</li>`).join(''):'<li>—</li>';
-  document.getElementById('mThesis').textContent=item.thesis||'—';
-  document.getElementById('mView').textContent=item.view||'—';
-  document.getElementById('mRisks').textContent=item.risks||'—';
-  document.getElementById('mHorizon').textContent=`${item.horizon||'—'} · ${zoneText(item)} · Status: ${item.statusLabel||item.status||'—'}`;
+    const why=document.getElementById('mWhyNow'); if(why) why.textContent=item.whyNow||'—';
+    const ul=document.getElementById('mCatalysts');
+    if(ul){
+      const cats=item.catalysts||[];
+      ul.innerHTML=cats.length?cats.map(c=>`<li>${String(c).replace(/</g,'&lt;')}</li>`).join(''):'<li>—</li>';
+    }
+    document.getElementById('mThesis').textContent=item.thesis||'—';
+    document.getElementById('mView').textContent=item.view||'—';
+    document.getElementById('mRisks').textContent=item.risks||'—';
+    document.getElementById('mHorizon').textContent=`${item.horizon||'—'} · ${zoneText(item)} · Status: ${item.statusLabel||item.status||'—'}`;
+    // scroll modal to top so Schließen always visible
+    document.getElementById('modal').scrollTop=0;
+  }catch(err){
+    console.error(err);
+  }
 }
 function render(data){
   document.getElementById('updated').textContent='Stand: '+(data.updatedAt||'—')+(data.updatedBy?' · '+data.updatedBy:'');
@@ -264,8 +285,9 @@ document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>
   document.getElementById('panel-stocks').classList.toggle('hidden',tab!=='stocks');
   document.getElementById('panel-crypto').classList.toggle('hidden',tab!=='crypto');
 }));
-document.getElementById('closeModal').addEventListener('click',()=>document.getElementById('modalBg').classList.add('hidden'));
-document.getElementById('modalBg').addEventListener('click',e=>{if(e.target.id==='modalBg') document.getElementById('modalBg').classList.add('hidden');});
+document.getElementById('closeModal').addEventListener('click',e=>{e.preventDefault();e.stopPropagation();closeModal();});
+document.getElementById('modalBg').addEventListener('click',e=>{if(e.target.id==='modalBg') closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closeModal();});
 render(DATA);
 </script>
 </body>
